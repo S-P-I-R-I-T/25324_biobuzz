@@ -19,7 +19,7 @@ public class drivingA extends LinearOpMode {
         rl.setDirection(DcMotorSimple.Direction.REVERSE);
 
         waitForStart();
-            // Pre-run
+            // Pre-runㅣ
 
         while (opModeIsActive()) {
                 // OpMode loop
