@@ -36,7 +36,8 @@ public class Action {
     public static double flower_open = 0.98;
     public static double blocker_open = 0.4;
     public static double blocker_close = 0.25;
-    public static double Intake_Power = 0.4;
+    public static double Intake_Power = 0.7;
+    public static double IntakeR_Power = -0.3;
 
 
     private final DcMotorEx shooter;
@@ -140,6 +141,10 @@ public class Action {
         intake.setPower(Intake_Power);
     }
 
+    public void IntakeROn(){
+        intake.setPower(IntakeR_Power);
+    }
+
     public void IntakeOff(){
         intake.setPower(0);
     }
@@ -154,6 +159,10 @@ public class Action {
 
     public void FlowerOpen(){
         flower.setPosition(flower_open);
+    }
+
+    public void FlowerClose(){
+        flower.setPosition(flower_init);
     }
 
 }

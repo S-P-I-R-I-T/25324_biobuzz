@@ -6,7 +6,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import org.firstinspires.ftc.teamcode.KLA.Util.Action;
 import org.firstinspires.ftc.teamcode.KLA.Util.Drive;
 
-@Configurable
 @TeleOp()
 public class Blue extends LinearOpMode {
 
@@ -30,6 +29,7 @@ public class Blue extends LinearOpMode {
                 Intake();
                 Outtake();
                 blocker();
+                flower();
 
             }
         }
@@ -37,8 +37,9 @@ public class Blue extends LinearOpMode {
 
     void Intake(){
         if (gamepad2.a){
-            action.BlockerClose();
             action.IntakeOn();
+        }else if(gamepad2.b) {
+            action.IntakeROn();
         }else{
             action.IntakeOff();
         }
@@ -53,10 +54,19 @@ public class Blue extends LinearOpMode {
     }
 
     void blocker(){
-        if (gamepad2.b){
+        if (gamepad2.dpad_left){
             action.BlockerOpen();
-        }else if (gamepad2.x){
+        }else if (gamepad2.dpad_right){
             action.BlockerClose();
         }
     }
+
+    void flower(){
+        if (gamepad2.dpad_up){
+            action.FlowerOpen();
+        }else if(gamepad2.dpad_down){
+            action.FlowerClose();
+        }
+    }
+
 }
