@@ -1,0 +1,44 @@
+---
+title: Tuning
+---
+
+import {Step, Steps} from "fumadocs-ui/components/steps";
+import Link from "next/link";
+
+<div className="relative w-full overflow-hidden rounded-xl border mb-6" style={{ aspectRatio: "16 / 9", maxWidth: "480px" }}>
+    <iframe
+        className="absolute inset-0 h-full w-full"
+        src="https://www.youtube.com/embed/YSukggRAsm4"
+        title="Pedro Pathing Tuning"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allowFullScreen
+    />
+</div>
+
+Pedro Pathing utilizes AutoTune, a robot-hosted webpage that allows for easy tuning of your robot's drivetrain, localizer, and the Foresight algorithm.
+
+Please ensure you properly [installed](/docs/pathing/installation) Pedro Pathing before continuing.
+
+The following steps will guide you through tuning your robot:
+
+<Steps>
+    <Step>
+        <h3><Link href="/docs/pathing/tuning/drivetrain/mecanum">Drivetrain</Link></h3>
+
+        Setting constants for your drivetrain such as your motor names and directions.
+    </Step>
+    <Step>
+        <h3>
+            <Link href="/docs/pathing/tuning/localization">Localization</Link>
+        </h3>
+
+        Tuning your localizer, which allows for your robot to know its location on the field.
+    </Step>
+    <Step>
+        <h3><Link href="/docs/pathing/tuning/foresight">Foresight</Link></h3>
+
+        Tuning Foresight, which is the built-in algorithm that allows your robot to follow paths accurately.
+    </Step>
+</Steps>

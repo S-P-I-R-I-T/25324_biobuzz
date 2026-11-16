@@ -5,20 +5,20 @@ import com.pedropathing.math.Pose;
 public class Turret {
     public Turret() {}
 
-    double SHOOTER_ANGLE_TPR = 537.7;
-    double GEAR_RATIO = 0/0;
+    public double SHOOTER_ANGLE_TPR = 537.7;
+    public double GEAR_RATIO = 135.0 / 89; // 135/89 는 정수 나눗셈이라 1이 된다
 
-    double RED_Garden_Cell_X = 58;
-    double RED_Garden_Cell_Y = 54;
+    public double RED_Garden_Cell_X = 58;
+    public double RED_Garden_Cell_Y = 54;
 
-    double RED_Flower_Cell_X = 58;
-    double RED_Flower_Cell_Y = 87.5;
+    public double RED_Flower_Cell_X = 58;
+    public double RED_Flower_Cell_Y = 87.5;
 
-    double BLUE_Garden_Cell_X = 84.5;
-    double BLUE_Garden_Cell_Y = 87.5;
+    public double BLUE_Garden_Cell_X = 84.5;
+    public double BLUE_Garden_Cell_Y = 87.5;
 
-    double BLUE_Flower_Cell_X = 84.5;
-    double BLUE_Flower_Cell_Y = 54;
+    public double BLUE_Flower_Cell_X = 84.5;
+    public double BLUE_Flower_Cell_Y = 54;
 
     public int alignTarget(Pose botPose , Pose targetPose) {
         double dy = targetPose.y() - botPose.y();

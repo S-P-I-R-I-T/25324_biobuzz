@@ -1,0 +1,50 @@
+---
+title: Modifying Constants
+description: How to use Config Variables with Pedro
+---
+
+Pedro constants can be modified both locally and globally. For more information about the different options, see [Foresight Options](/docs/pathing/reference/foresightoptions) and [Path Constraints](/docs/pathing/reference/pathconstraints). Here's how to change your constants:
+
+## Global Values
+
+The values in your `Constants.java` are the global values. Consider the following example:
+
+```java
+public static ForesightConfig foresightConfig = new ForesightConfig(
+    c -> {
+        c.brakeAggression.set(1.0);
+        c.maxBrakingPower.set(0.2);
+        c.maxAccelerationConstraint.set(ForesightConfig.Constraint.NONE);
+        c.maxVelocityConstraint.set(ForesightConfig.Constraint.NONE);
+        c.maxDecelerationConstraint.set(ForesightConfig.Constraint.NONE);
+        c.coastDownToVelocity.set(0.0);
+
+        // Other Foresight constants...
+    }
+);
+```
+
+The values in this excerpt are the global values that will be used for all paths by default. Unless the constants for a specific path are modified locally, these are the values that will be used.
+
+## Local Values
+
+Local values take precedence over global values, meaning they will overwrite the global ones for the `Path` object they are associated with.
+
+To change the local constants for a specific path, you can reference the following example, using the `with()` method of the `Path` class:
+
+```java
+forwards = curve(Pose.zero(), new Pose(72,72))
+                .constant(0)
+                .with(
+                        Constants.foresightConfig.maxPathSpeed.at(0.8),
+                        Constants.foresightConfig.maxDecelerationScale.at(0.75),
+                        Constants.foresightConfig.headingDriveRatio.at(0.7)
+                );
+```
+
+Essentially, you call `at()` on a specific constant, represented as a `ConfigVar` object in Pedro, and pass that into the `with()` function. This can be done when initializing the `Path` or later. You may pass in any number of modifiers into the `with()` function.
+
+These local constants will only alter this specific path, and will not affect any other paths.
+
+
+

@@ -1,72 +1,47 @@
 package org.firstinspires.ftc.teamcode.KLA.Teleop;
 
-import com.bylazar.configurables.annotations.Configurable;
-import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
-import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import dev.nextftc.robot.triggers.CommandGamepad;
+import dev.nextftc.robot.opmode.NextOpMode;
+import dev.nextftc.robot.opmode.NextTeleop;
+import dev.nextftc.robot.opmode.BulkReadHook;
+import com.pedropathing.ivy.Scheduler;
 import org.firstinspires.ftc.teamcode.KLA.Util.Action;
 import org.firstinspires.ftc.teamcode.KLA.Util.Drive;
+import org.firstinspires.ftc.teamcode.KLA.Util.Robot;
 
-@TeleOp()
-public class Blue extends LinearOpMode {
+@NextTeleop(name = "Blue")
+public class Blue extends NextOpMode {
+    private final Robot robot;
+    private Drive drive;
 
-    Drive drive;
-    Action action;
+    public Blue(Robot robot) {
+        super(robot, BulkReadHook.INSTANCE);
+        this.robot = robot;
+    }
 
-    @Override
-    public void runOpMode() {
+    @Override public void start() {
+        Scheduler.reset();
         drive = new Drive(hardwareMap, telemetry, gamepad1);
         drive.init();
-        action = new Action(hardwareMap, telemetry);
+        robot.action = new Action(hardwareMap);
+        robot.mechanisms = java.util.Set.of(robot.action);
+        CommandGamepad operator = new CommandGamepad(gamepad2);
+        Action action = robot.action;
 
-        waitForStart();
-        if (opModeIsActive()) {
-            while (opModeIsActive()) {
-
-                action.clearBulkCache();
-                action.updateShooterPidf();
-                drive.controlWithPad();
-
-                Intake();
-                Outtake();
-                blocker();
-                flower();
-
-            }
-        }
+        operator.a().whileTrue(action.intakeForward());
+        operator.b().whileTrue(action.intakeReverse());
+        operator.a().onFalse(action.intakeOff());
+        operator.b().onFalse(action.intakeOff());
+        operator.rightTrigger().isOver(0.5)
+                .whileTrue(action.shoot())
+                .onFalse(action.stopShooter());
+        operator.dpadLeft().onTrue(action.blockerOpen());
+        operator.dpadRight().onTrue(action.blockerClose());
+        operator.dpadUp().onTrue(action.flowerOpen());
+        operator.dpadDown().onTrue(action.flowerClose());
     }
 
-    void Intake(){
-        if (gamepad2.a){
-            action.IntakeOn();
-        }else if(gamepad2.b) {
-            action.IntakeROn();
-        }else{
-            action.IntakeOff();
-        }
+    @Override public void periodic() {
+        if (drive != null) drive.controlWithPad();
     }
-
-    void Outtake(){
-        if (gamepad2.right_trigger > 0.5) {
-            action.startShooter();
-        } else {
-            action.stopShooter();
-        }
-    }
-
-    void blocker(){
-        if (gamepad2.dpad_left){
-            action.BlockerOpen();
-        }else if (gamepad2.dpad_right){
-            action.BlockerClose();
-        }
-    }
-
-    void flower(){
-        if (gamepad2.dpad_up){
-            action.FlowerOpen();
-        }else if(gamepad2.dpad_down){
-            action.FlowerClose();
-        }
-    }
-
 }
