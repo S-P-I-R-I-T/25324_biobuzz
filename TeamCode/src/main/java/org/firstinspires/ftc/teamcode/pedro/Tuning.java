@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.pedro;
 
+import com.pedropathing.algorithm.Foresight;
 import com.pedropathing.algorithm.ForesightConfig;
 import com.pedropathing.controllers.Controller;
 import com.pedropathing.math.Matrix;
@@ -21,10 +22,6 @@ public class Tuning {
         return new MecanumTuner();
     }
 
-    @Tuner
-    public static Procedure tests() {
-        return new Tests(hardwareMap -> new Mecanum(hardwareMap, Constants.driveConfig), (hardwareMap -> new PinpointLocalizer(hardwareMap, Constants.localizerConfig)), null);
-    }
 
     @Tuner
     public static Procedure pinpointTuner() {
@@ -32,9 +29,12 @@ public class Tuning {
     }
 
     @Tuner
-    public static Procedure foresightTuner() {
-        return new ForesightTuner((hardwareMap) -> new PinpointLocalizer(hardwareMap, Constants.localizerConfig), (hardwareMap) -> new Mecanum(hardwareMap, Constants.driveConfig));
+    public static Procedure foresightTuner(){
+        return new ForesightTuner(hardwareMap -> new PinpointLocalizer(hardwareMap,Constants.localizerConfig),(hardwareMap -> new Mecanum(hardwareMap,Constants.driveConfig)));
     }
 
-
+    @Tuner
+    public  static Procedure tests(){
+        return new Tests(hardwareMap -> new Mecanum(hardwareMap,Constants.driveConfig),(hardwareMap -> new PinpointLocalizer(hardwareMap,Constants.localizerConfig)), () -> new Foresight(Constants.foresightConfig));
+    }
 }

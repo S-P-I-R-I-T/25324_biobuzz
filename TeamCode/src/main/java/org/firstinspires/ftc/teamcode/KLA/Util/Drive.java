@@ -29,8 +29,8 @@ public class Drive {
         this.fr = hardwareMap.get(DcMotor.class, "fr");
         this.rl = hardwareMap.get(DcMotor.class, "rl");
         this.rr = hardwareMap.get(DcMotor.class, "rr");
-        this.fr.setDirection(DcMotorSimple.Direction.REVERSE);
-        this.rr.setDirection(DcMotorSimple.Direction.REVERSE);
+        this.fl.setDirection(DcMotorSimple.Direction.REVERSE);
+        this.rl.setDirection(DcMotorSimple.Direction.REVERSE);
         this.imu = hardwareMap.get(IMU.class, "imu");
         this.telemetry = telemetry;
         this.gamepad1 = gamepad1;

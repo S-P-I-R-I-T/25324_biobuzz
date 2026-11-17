@@ -28,10 +28,9 @@ public class Blue extends NextOpMode {
         CommandGamepad operator = new CommandGamepad(gamepad2);
         Action action = robot.action;
 
-        operator.a().whileTrue(action.intakeForward());
+        // 커맨드가 끝날 때(버튼 해제) 스스로 상태를 해제하므로 onFalse(intakeOff)는 필요 없다.
+        operator.a().whileTrue(action.intakeForward());   // 발사 중에 누르면 강제 급탄
         operator.b().whileTrue(action.intakeReverse());
-        operator.a().onFalse(action.intakeOff());
-        operator.b().onFalse(action.intakeOff());
         operator.rightTrigger().isOver(0.5)
                 .whileTrue(action.shoot())
                 .onFalse(action.stopShooter());
@@ -43,5 +42,13 @@ public class Blue extends NextOpMode {
 
     @Override public void periodic() {
         if (drive != null) drive.controlWithPad();
+        Action action = robot.action;
+        if (action != null) {
+            telemetry.addData("shooter", "%.0f / %.0f  %s",
+                    action.shooterVelocity(), Action.SHOOTING_VELOCITY,
+                    action.shooterAtSpeed() ? "READY" : "spin-up");
+            telemetry.addData("feed", action.isShooting()
+                    ? (action.isFeeding() ? "급탄 중 (" + action.feedReason() + ")" : "대기") : "-");
+        }
     }
 }
