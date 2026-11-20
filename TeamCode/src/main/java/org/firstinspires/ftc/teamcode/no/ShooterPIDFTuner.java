@@ -1,4 +1,6 @@
-package org.firstinspires.ftc.teamcode.KLA.Teleop;
+package org.firstinspires.ftc.teamcode.no;
+
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 
 import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
@@ -34,6 +36,7 @@ import org.firstinspires.ftc.teamcode.KLA.Util.Action;
  * F는 Action과 동일하게 배터리 전압(12V 기준)으로 보정해서 적용한다.
  */
 @Configurable
+@Disabled
 @TeleOp(name = "Shooter PIDF Tuner", group = "Tuning")
 public class ShooterPIDFTuner extends OpMode {
     public static double P = Action.P, I = Action.I, D = Action.D, F = Action.F;

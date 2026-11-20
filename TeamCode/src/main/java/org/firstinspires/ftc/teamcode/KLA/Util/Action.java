@@ -11,19 +11,18 @@ import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 
+import java.util.function.DoubleSupplier;
+
 import static com.pedropathing.ivy.commands.Commands.instant;
 import static com.pedropathing.ivy.commands.Commands.infinite;
 
 /**
  * NextFTC mechanism containing the intake, shooter, and game-piece servos.
  *
- * <p>인테이크 모터 출력은 {@link #update()} 한 곳에서만 결정한다. 버튼 커맨드는 "눌려 있다"는 상태만
- * 바꾸고 모터에 직접 쓰지 않으므로, 발사 커맨드와 인테이크 커맨드가 서로 막거나 덮어쓰지 않는다.
- *
  * <pre>
- *   발사 중이 아닐 때 : A = 인테이크 정방향, B = 역방향
- *   발사 중          : 슈터가 목표 속도에 도달하거나, SPINUP_TIMEOUT_S 가 지나거나,
- *                      A(인테이크)를 누르면 → 블로커 열고 인테이크 풀파워로 급탄 (트리거 놓을 때까지 유지)
+ *   발사 버튼 누르는 동안 : 슈터 목표 속도 + 블로커 열림, 목표 속도 도달하면 인테이크 자동 급탄 (Intake_Power)
+ *   발사 버튼 떼면        : 슈터 예열/정지 + 블로커 닫힘 + 인테이크 정지
+ *   A = 정방향, B = 역방향 (언제든 수동으로 덮어씀)
  * </pre>
  */
 @Configurable
@@ -31,35 +30,42 @@ public class Action implements Mechanism {
     private static final long PIDF_VOLTAGE_REFRESH_NS = 500_000_000L;
     private static final double PIDF_F_UPDATE_THRESHOLD = 0.01;
 
-    public static double P = 20, I = 0.05, D = 0.0, F = 15.5;
-    public static double SHOOTING_VELOCITY = 1500;
+    public static double P = 100, I = 0, D = 0.0, F = 18.5;
+    /** true: 거리 → ShotTable로 후드 자동. false: hood_pos 수동 (표 값 찾을 때). 속도는 항상 SHOOTING_VELOCITY. */
+    public static boolean AUTO_SHOT = true;
+    public static double SHOOTING_VELOCITY = 1300;
+    /** TeleOp 예열 속도 (발사 안 할 때, ticks/s). */
+    public static double IDLE_VELOCITY = 800;
     public static double SHOOTER_VELOCITY_TOLERANCE = 50;
-    /** 발사 시작 후 이 시간(초)이 지나면 속도 미달이어도 급탄한다. 0 이하면 끔(속도 도달 또는 A 버튼으로만 급탄). */
-    public static double SPINUP_TIMEOUT_S = 1.5;
-    public static double Shoot_Intake_Power = 1.0;
-    public static double flower_init = 0.5, flower_open = 0.98;
-    public static double blocker_open = 0.4, blocker_close = 0.25;
-    public static double Intake_Power = 0.7, IntakeR_Power = -0.3;
+    public static double Shoot_Intake_Power = 0.7;
+    public static double flower_init = 0.465, flower_open = 0.945, flower_Nachi = 0.7;
+    public static double blocker_open = 0.99, blocker_close = 0.91;
+    public static double Intake_Power = 0.7, IntakeR_Power = -0.4;
+    /** 수동 모드(AUTO_SHOT = false) 후드 위치. */
+    public static double hood_pos = 0.84;
+    public static double HOOD_MIN = 0.80, HOOD_MAX = 0.97;
+    public static double HOOD_FINE_STEP = 0.01, HOOD_COARSE_STEP = 0.05;
+    /** 연발 중 슈터 속도가 떨어진 만큼 후드를 올림: 1 tick/s 떨어질 때마다 +이 값. 0이면 보정 끔. */
+    public static double HOOD_COMP_PER_TPS = 0.0004;
+    public static double HOOD_COMP_DEADBAND_TPS = 20;
+    public static double HOOD_COMP_FILTER_SEC = 0.05;
 
     private final HardwareMap hardwareMap;
     private final DcMotorEx shooter;
     private final DcMotor intake;
-    private final Servo blocker, flower;
+    private final Servo blocker, flower, hood;
+    private double appliedHoodPos = Double.NaN, hoodCommand;
+    private boolean shooting, keepSpinning, feeding;
+    private double lastIdleVelocity = Double.NaN;
+    private DoubleSupplier distanceSupplier;
+    private double distance = Double.NaN, targetVelocity = SHOOTING_VELOCITY, baseHood = hood_pos;
+    private boolean autoActive;
+    private double filteredVelocity;
+    private long lastHoodNs = System.nanoTime();
     private long nextPidfVoltageRefreshNs;
     private double cachedBatteryVoltage;
     private double appliedP = Double.NaN, appliedI = Double.NaN;
     private double appliedD = Double.NaN, appliedF = Double.NaN;
-
-    // 버튼/발사 상태. 실제 출력은 update()가 이 값들로 결정한다.
-    private boolean intakeForwardHeld, intakeReverseHeld;
-    private boolean shooting, feeding;
-    /** 발사 전에 슈터만 미리 돌리는 상태(급탄은 하지 않음). 오토에서 이동 중 예열용. */
-    private boolean shooterArmed;
-    private long shootStartNs;
-    private String feedReason = "-";
-
-    // 같은 값을 매 루프 다시 보내지 않도록 마지막으로 쓴 값을 기억한다.
-    private double lastIntakePower = Double.NaN;
 
     public Action(HardwareMap hardwareMap) {
         this.hardwareMap = hardwareMap;
@@ -67,20 +73,73 @@ public class Action implements Mechanism {
         intake = hardwareMap.get(DcMotor.class, "intake");
         blocker = hardwareMap.get(Servo.class, "blocker");
         flower = hardwareMap.get(Servo.class, "flower");
+        hood = hardwareMap.get(Servo.class, "hood");
         intake.setDirection(DcMotorSimple.Direction.REVERSE);
         shooter.setDirection(DcMotorSimple.Direction.REVERSE);
         shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         refreshShooterPidf(true);
         shooter.setVelocity(0);
-        setIntakePower(0);
+        intake.setPower(0);
         flower.setPosition(flower_init);
         blocker.setPosition(blocker_close);
+        applyHood();
     }
 
     @Override public void periodic() {
         refreshShooterPidf(false);
-        update();
+        updateShotParams();
+        if (keepSpinning && !shooting && IDLE_VELOCITY != lastIdleVelocity) {
+            shooter.setVelocity(IDLE_VELOCITY);
+            lastIdleVelocity = IDLE_VELOCITY;
+        }
+        applyHood();
     }
+
+    /** 목표까지 거리(inch)를 주는 함수. 없으면 수동 값 사용. */
+    public void setDistanceSupplier(DoubleSupplier supplier) { distanceSupplier = supplier; }
+
+    private void updateShotParams() {
+        distance = distanceSupplier != null ? distanceSupplier.getAsDouble() : Double.NaN;
+        autoActive = AUTO_SHOT && !Double.isNaN(distance) && ShotTable.valid();
+        targetVelocity = SHOOTING_VELOCITY;
+        baseHood = clampHood(autoActive ? ShotTable.hood(distance) : hood_pos);
+    }
+
+    // ── 후드 ──
+    private void applyHood() {
+        hood_pos = clampHood(hood_pos);
+
+        long now = System.nanoTime();
+        double dt = (now - lastHoodNs) / 1e9;
+        lastHoodNs = now;
+        filteredVelocity += dt / (HOOD_COMP_FILTER_SEC + dt) * (shooter.getVelocity() - filteredVelocity);
+
+        double comp = 0;
+        if (shooting) {
+            double drop = targetVelocity - filteredVelocity - HOOD_COMP_DEADBAND_TPS;
+            if (drop > 0) comp = drop * HOOD_COMP_PER_TPS;
+        }
+        hoodCommand = clampHood(baseHood + comp);
+        if (Double.isNaN(appliedHoodPos) || Math.abs(hoodCommand - appliedHoodPos) >= 0.002) {
+            hood.setPosition(hoodCommand);
+            appliedHoodPos = hoodCommand;
+        }
+    }
+
+    private static double clampHood(double pos) { return Math.max(HOOD_MIN, Math.min(HOOD_MAX, pos)); }
+
+    /** 후드를 delta만큼 움직인다(0~1로 제한). */
+    public CommandBuilder hoodAdjust(double delta) {
+        return instant(() -> { hood_pos += delta; applyHood(); });
+    }
+
+    /** 후드를 지정 위치로 (나중에 거리별 값이 정해지면 사용). */
+    public CommandBuilder hoodTo(double position) {
+        return instant(() -> { hood_pos = position; applyHood(); });
+    }
+
+    public double hoodPosition() { return hood_pos; }
+    public double hoodCommand() { return hoodCommand; }
 
     private void refreshShooterPidf(boolean force) {
         long now = System.nanoTime();
@@ -104,120 +163,81 @@ public class Action implements Mechanism {
         }
     }
 
-    /**
-     * 현재 상태로 슈터/블로커/인테이크 출력을 정한다. 매 루프 periodic()에서 호출되고,
-     * 커맨드 실행 중에도 호출되어 버튼 반응이 한 루프 늦지 않게 한다. 여러 번 불려도 결과는 같다.
-     */
-    public void update() {
-        if (shooting) {
-            shooter.setVelocity(SHOOTING_VELOCITY);
-            if (!feeding) {
-                double elapsedS = (System.nanoTime() - shootStartNs) / 1e9;
-                if (shooterAtSpeed()) startFeeding("속도 도달");
-                else if (intakeForwardHeld) startFeeding("A 강제");
-                else if (SPINUP_TIMEOUT_S > 0 && elapsedS >= SPINUP_TIMEOUT_S) startFeeding("타임아웃");
-            }
-            if (feeding) setIntakePower(Shoot_Intake_Power);
-            else if (intakeReverseHeld) setIntakePower(IntakeR_Power);
-            else setIntakePower(0);
-        } else {
-            if (shooterArmed) shooter.setVelocity(SHOOTING_VELOCITY);
-            if (intakeForwardHeld) setIntakePower(Intake_Power);
-            else if (intakeReverseHeld) setIntakePower(IntakeR_Power);
-            else setIntakePower(0);
-        }
-    }
-
-    private void startFeeding(String reason) {
-        feeding = true;
-        feedReason = reason;
-        blocker.setPosition(blocker_open);
-    }
-
-    private void setIntakePower(double power) {
-        if (Double.compare(power, lastIntakePower) != 0) {
-            intake.setPower(power);
-            lastIntakePower = power;
-        }
-    }
-
-    /** 누르고 있는 동안 인테이크 정방향. 발사 중에 누르면 속도와 상관없이 즉시 급탄한다. */
+    // ── 인테이크 (TeleOp: 누르는 동안) ──
     public CommandBuilder intakeForward() {
-        return infinite(this::update)
-                .setStart(() -> { intakeForwardHeld = true; update(); })
-                .setEnd(endCondition -> { intakeForwardHeld = false; update(); });
+        return infinite(() -> intake.setPower(Intake_Power))
+                .setEnd(endCondition -> intake.setPower(0))
+                .requiring(intake);
     }
-
-    /** 누르고 있는 동안 인테이크 역방향. 급탄 중에는 무시된다. */
     public CommandBuilder intakeReverse() {
-        return infinite(this::update)
-                .setStart(() -> { intakeReverseHeld = true; update(); })
-                .setEnd(endCondition -> { intakeReverseHeld = false; update(); });
+        return infinite(() -> intake.setPower(IntakeR_Power))
+                .setEnd(endCondition -> intake.setPower(0))
+                .requiring(intake);
     }
 
-    /** 버튼 상태를 모두 해제한다(안전망). 발사 중 급탄은 멈추지 않는다. */
-    public CommandBuilder intakeOff() {
-        return instant(() -> { intakeForwardHeld = false; intakeReverseHeld = false; update(); });
-    }
+    // ── 인테이크 (오토: 켜고 끄기) ──
+    public CommandBuilder intakeOn() { return instant(() -> intake.setPower(Intake_Power)); }
+    /** 발사할 때 급탄 (TeleOp 인테이크와 같은 0.7). */
+    public CommandBuilder feedOn() { return instant(() -> intake.setPower(Shoot_Intake_Power)); }
+    public CommandBuilder intakeStop() { return instant(() -> intake.setPower(0)); }
 
-    // ── 오토용: 버튼 없이 상태만 켜고 끄는 instant 커맨드 ──
-    /** 인테이크 정방향 켜기. intakeStop()까지 유지된다. */
-    public CommandBuilder intakeOn() {
-        return instant(() -> { intakeReverseHeld = false; intakeForwardHeld = true; update(); });
-    }
-    /** 인테이크 끄기. intakeOff()와 같다. */
-    public CommandBuilder intakeStop() { return intakeOff(); }
-
-    /** 슈터만 미리 목표 속도로 돌린다(급탄 X). 이후 shoot()이 시작되면 바로 급탄되고, 발사가 끝나면 꺼진다. */
-    public CommandBuilder spinUp() {
-        return instant(() -> { shooterArmed = true; update(); });
-    }
-
-    /** 슈터가 목표 속도에 도달했는지 여부. */
+    // ── 슈터 ──
+    /** 슈터가 목표 속도에 도달했는지 여부 (텔레메트리용). */
     public boolean shooterAtSpeed() {
-        return shooter.getVelocity() >= SHOOTING_VELOCITY - SHOOTER_VELOCITY_TOLERANCE;
+        return shooter.getVelocity() >= targetVelocity - SHOOTER_VELOCITY_TOLERANCE;
     }
 
-    /**
-     * 누르고 있는 동안 실행: 슈터를 목표 속도로 돌리고, 급탄 조건(속도 도달 / A 버튼 / 타임아웃)이
-     * 되면 블로커를 열고 인테이크를 풀파워로 돌린다. 한 번 급탄을 시작하면 속도가 잠깐 떨어져도
-     * 유지하고, 커맨드가 끝날 때(트리거 해제) 슈터를 멈추고 블로커를 닫는다.
-     * 인테이크는 requirement로 잡지 않으므로 발사 중에도 인테이크 버튼이 동작한다.
-     */
+    /** 누르고 있는 동안: 슈터 목표 속도 + 블로커 열림, 목표 속도 도달하면 그때부터 인테이크 급탄(계속). 끝나면 전부 정지. */
     public CommandBuilder shoot() {
-        return infinite(this::update)
-                .setStart(() -> {
-                    shooting = true;
-                    feeding = false;
-                    feedReason = "-";
-                    shootStartNs = System.nanoTime();
-                    update();
+        return infinite(() -> {
+                    shooter.setVelocity(targetVelocity);
+                    if (!feeding && shooterAtSpeed()) {
+                        feeding = true;
+                        intake.setPower(Intake_Power);
+                    }
                 })
-                .setEnd(endCondition -> stopShooting())
+                .setStart(() -> { shooting = true; feeding = false; blocker.setPosition(blocker_open); })
+                .setEnd(endCondition -> {
+                    if (feeding) intake.setPower(0);
+                    feeding = false;
+                    stopShooting();
+                })
                 .requiring(shooter);
     }
 
-    /** 트리거를 놓았을 때의 안전망. shoot()의 end와 같은 동작. */
+    /** 슈터만 미리 돌린다(블로커는 닫힌 채). 오토에서 이동 중 예열용. shoot()이 끝나면 함께 꺼진다. */
+    /** true면 발사 안 할 때도 슈터를 IDLE_VELOCITY로 계속 돌림 (TeleOp 예열). 블로커는 닫힌 채. */
+    public void setKeepSpinning(boolean on) {
+        keepSpinning = on;
+        lastIdleVelocity = Double.NaN;
+        if (!on && !shooting) shooter.setVelocity(0);
+    }
+
+    public CommandBuilder spinUp() { return instant(() -> { updateShotParams(); shooter.setVelocity(targetVelocity); }); }
+
+    /** 버튼을 놓았을 때의 안전망. shoot()의 end와 같은 동작. */
     public CommandBuilder stopShooter() { return instant(this::stopShooting); }
 
     private void stopShooting() {
-        if (!shooting && !feeding && !shooterArmed) return;
         shooting = false;
-        feeding = false;
-        shooterArmed = false;
-        shooter.setVelocity(0);
+        lastIdleVelocity = keepSpinning ? IDLE_VELOCITY : Double.NaN;
+        shooter.setVelocity(keepSpinning ? IDLE_VELOCITY : 0);
         blocker.setPosition(blocker_close);
-        update(); // 인테이크는 버튼 상태로 복귀 (A를 누르고 있으면 계속 돈다)
     }
 
     public CommandBuilder blockerOpen() { return instant(() -> blocker.setPosition(blocker_open)); }
     public CommandBuilder blockerClose() { return instant(() -> blocker.setPosition(blocker_close)); }
     public CommandBuilder flowerOpen() { return instant(() -> flower.setPosition(flower_open)); }
-    public CommandBuilder flowerClose() { return instant(() -> flower.setPosition(flower_init)); }
+    public CommandBuilder flowerClose() { return instant(() -> flower.setPosition(flower_Nachi)); }
 
-    // ── 텔레메트리용 ──
     public double shooterVelocity() { return shooter.getVelocity(); }
-    public boolean isShooting() { return shooting; }
-    public boolean isFeeding() { return feeding; }
-    public String feedReason() { return feedReason; }
+    /** 지금 돌려야 할 속도(발사 중이면 목표, 아니면 예열)에 도달했는지. */
+    public boolean shooterSpunUp() {
+        double want = shooting ? targetVelocity : (keepSpinning ? IDLE_VELOCITY : targetVelocity);
+        return shooter.getVelocity() >= want - SHOOTER_VELOCITY_TOLERANCE;
+    }
+    public double targetVelocity() { return targetVelocity; }
+    public double baseHood() { return baseHood; }
+    public double distance() { return distance; }
+    public boolean autoShotActive() { return autoActive; }
 }

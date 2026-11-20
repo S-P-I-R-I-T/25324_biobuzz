@@ -1,6 +1,7 @@
-package org.firstinspires.ftc.teamcode.KLA.Auto;
+package org.firstinspires.ftc.teamcode.no;
 
-import static com.pedropathing.api.Paths.*;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
+
 import com.pedropathing.api.Paths;
 
 import com.pedropathing.api.PoseFactory;
@@ -21,11 +22,13 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
 import org.firstinspires.ftc.teamcode.KLA.Util.Action;
+import org.firstinspires.ftc.teamcode.KLA.Util.Alliance;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 
 import java.util.List;
 
 @Configurable
+@Disabled
 @Autonomous
 public class BlueGarden extends LinearOpMode {
     /** shootFlower 도착 후 발사(급탄) 시간. 슈터는 이동 중 미리 돌려 두므로 거의 전부 급탄 시간이다. */
@@ -69,7 +72,9 @@ public class BlueGarden extends LinearOpMode {
                 action.spinUp(),
                 follow(follower, shootFlower()),
                 hold(follower, shootFlower),                         // 발사 중 밀려도 자리 유지
+                action.feedOn(),                                     // shoot()은 인테이크를 안 돌리므로 직접 급탄
                 deadline(waitMs(SHOOT_TIME_MS), action.shoot()),    // 시간 끝나면 shoot 종료 → 슈터 정지, 블로커 닫힘
+                action.intakeStop(),
 
                 // Flower 수집: 플라워 열고 인테이크 ON
                 action.flowerOpen(),
@@ -94,6 +99,7 @@ public class BlueGarden extends LinearOpMode {
         follower.setPose(start);
         follower.update();
         action = new Action(hardwareMap);   // 플라워 init / 블로커 닫힘 위치로 이동
+        action.setDistanceSupplier(() -> Alliance.BLUE.distanceToTarget(follower.pose()));
 
         waitForStart();
         schedule(autoRoutine());
@@ -102,10 +108,9 @@ public class BlueGarden extends LinearOpMode {
             for (LynxModule hub : hubs) hub.clearBulkCache();
             follower.update();
             Scheduler.execute();
-            action.periodic();   // NextOpMode가 아니므로 직접 호출 (PIDF 전압 보정 + 인테이크/슈터 출력)
+            action.periodic();   // NextOpMode가 아니므로 직접 호출 (슈터 PIDF 전압 보정)
 
-            telemetry.addData("shooter", "%.0f / %.0f", action.shooterVelocity(), Action.SHOOTING_VELOCITY);
-            telemetry.addData("feed", action.isFeeding() ? "급탄 중 (" + action.feedReason() + ")" : "-");
+            telemetry.addData("shooter", "%.0f / %.0f  dist %.1f", action.shooterVelocity(), action.targetVelocity(), action.distance());
 
             telemetry.addData("x", follower.pose().x());
             telemetry.addData("y", follower.pose().y());
