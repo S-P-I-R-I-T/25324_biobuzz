@@ -12,7 +12,7 @@ KLA/
             ShotTable      거리 → 후드 표
             Alliance       진영별 셀 좌표, 목표 셀 선택
             PoseStore      오토 끝 위치 → TeleOp 넘김
-            HubLed         허브 LED (무지개 / 준비되면 초록)
+            HubLed         허브 LED (무지개 / 준비되면 초록) << 심심풀이용 기능임 
 ```
 `no/` 폴더는 테스트·옛날 코드 (`@Disabled`로 숨김).
 
